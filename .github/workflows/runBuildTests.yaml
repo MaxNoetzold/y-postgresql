@@ -1,0 +1,159 @@
+name: Test Builds
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  # check the esm build
+  esm:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    timeout-minutes: 10
+
+    strategy:
+      # I want the test to run on all node versions to see if a problem is caused by a specific node version
+      fail-fast: false
+      matrix:
+        node-version: ['16.x', '18.x', '20.x']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Build y-postgresql
+        run: |
+          npm ci
+          npm run build
+
+      # I install the dependencies here and overwrite y-postgresql with the just built version to use the latest version
+      - name: Create ESM server
+        run: |
+          cd example-servers/esm
+          npm ci
+          cp -r $GITHUB_WORKSPACE/src $GITHUB_WORKSPACE/example-servers/esm/node_modules/y-postgresql/
+          cp -r $GITHUB_WORKSPACE/dist $GITHUB_WORKSPACE/example-servers/esm/node_modules/y-postgresql/
+          cp $GITHUB_WORKSPACE/package.json $GITHUB_WORKSPACE/example-servers/esm/node_modules/y-postgresql/
+          npm run build
+
+      # Afterwards I run it and kill it after 5 seconds to get the console output
+      - name: Run ESM server
+        id: scripts
+        env:
+          PG_HOST: localhost
+          PG_PORT: 5432
+          PG_DATABASE: test
+          PG_USER: postgres
+          PG_PASSWORD: postgres
+          PORT: 3000
+        run: |
+          cd example-servers/esm
+          npm run start &>> output.txt & SERVER_PID=$!
+          sleep 5
+          kill $SERVER_PID
+          cat output.txt
+
+      # We currently only check if the console output contains the "Yjs was already imported" error message
+      - name: Check console output
+        run: |
+          cd example-servers/esm
+          CONSOLE_OUTPUT=$(cat output.txt)
+          echo "$CONSOLE_OUTPUT"
+          if echo "$CONSOLE_OUTPUT" | grep -q "Yjs was already imported"; then
+            echo "Error message found in console output"
+            exit 1
+          else
+            echo "No error message found in console output"
+          fi
+        shell: bash
+
+  # check the cjs build
+  commonjs:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    timeout-minutes: 10
+
+    strategy:
+      # I want the test to run on all node versions to see if a problem is caused by a specific node version
+      fail-fast: false
+      matrix:
+        node-version: ['16.x', '18.x', '20.x']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Build y-postgresql
+        run: |
+          npm ci
+          npm run build
+
+      # I install the dependencies here and overwrite y-postgresql with the just built version to use the latest version
+      - name: Create CJM server
+        run: |
+          cd example-servers/commonjs
+          npm ci
+          cp -r $GITHUB_WORKSPACE/src $GITHUB_WORKSPACE/example-servers/commonjs/node_modules/y-postgresql/
+          cp -r $GITHUB_WORKSPACE/dist $GITHUB_WORKSPACE/example-servers/commonjs/node_modules/y-postgresql/
+          cp $GITHUB_WORKSPACE/package.json $GITHUB_WORKSPACE/example-servers/commonjs/node_modules/y-postgresql/
+
+      # Afterwards I run it and kill it after 5 seconds to get the console output
+      - name: Create and run CJM server
+        id: scripts
+        env:
+          PG_HOST: localhost
+          PG_PORT: 5432
+          PG_DATABASE: test
+          PG_USER: postgres
+          PG_PASSWORD: postgres
+          PORT: 3000
+        run: |
+          cd example-servers/commonjs
+          npm run start &>> output.txt & SERVER_PID=$!
+          sleep 5
+          kill $SERVER_PID
+          cat output.txt
+
+      # We currently only check if the console output contains the "Yjs was already imported" error message
+      - name: Check console output
+        run: |
+          cd example-servers/commonjs
+          CONSOLE_OUTPUT=$(cat output.txt)
+          echo "$CONSOLE_OUTPUT"
+          if echo "$CONSOLE_OUTPUT" | grep -q "Yjs was already imported"; then
+            echo "Error message found in console output"
+            exit 1
+          else
+            echo "No error message found in console output"
+          fi
+        shell: bash
