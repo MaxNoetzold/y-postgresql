@@ -1,6 +1,9 @@
 name: Test Builds
 
 on:
+  # to run this workflow manually
+  workflow_dispatch:
+
   pull_request:
     branches: [main]
 
