@@ -1,14 +1,15 @@
 import * as Y from 'yjs';
 import pg, { Pool } from 'pg';
 import format from 'pg-format';
-import { PostgresqlPersistence } from '../src/y-postgresql';
 import dotenv from 'dotenv';
+import { PostgresqlPersistence } from '../src/y-postgresql';
 import generateLargeText from './generateLargeText';
+
 dotenv.config();
 
 const connectionOptions = {
 	host: process.env.PG_HOST,
-	port: parseInt(`${process.env.PG_PORT}`),
+	port: parseInt(`${process.env.PG_PORT}`, 10),
 	database: process.env.PG_DATABASE,
 	user: process.env.PG_USER,
 	password: process.env.PG_PASSWORD,
